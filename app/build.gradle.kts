@@ -18,13 +18,10 @@ val keystoreProperties = if (keystorePropertiesFile.exists() && keystoreProperti
 } else null
 
 fun String.execute(currentWorkingDir: File = file("./")): String {
-    val byteOut = ByteArrayOutputStream()
-    project.exec {
+    return providers.exec {
         workingDir = currentWorkingDir
         commandLine = split("\\s".toRegex())
-        standardOutput = byteOut
-    }
-    return String(byteOut.toByteArray()).trim()
+    }.standardOutput.asText.get().trim()
 }
 
 val gitCommitCount = "git rev-list HEAD --count".execute().toInt()
@@ -46,7 +43,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.a13e300.ksuwebui"
-        minSdk = 26
+        minSdk = 21
         targetSdk = 36
         versionCode = gitCommitCount
         versionName = "1.0"
@@ -82,6 +79,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlin {
         jvmToolchain {
@@ -100,6 +98,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.appcompat)

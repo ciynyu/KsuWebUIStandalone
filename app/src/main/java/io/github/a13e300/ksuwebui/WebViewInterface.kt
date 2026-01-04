@@ -17,7 +17,6 @@ import com.topjohnwu.superuser.internal.UiThreadHandler
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.util.concurrent.CompletableFuture
 
 class WebViewInterface(
     val context: Context,
@@ -124,32 +123,31 @@ class WebViewInterface(
         }
 
         val future = shell.newJob().add(finalCommand.toString()).to(stdout, stderr).enqueue()
-        val completableFuture = CompletableFuture.supplyAsync {
-            future.get()
-        }
-
-        completableFuture.thenAccept { result ->
-            val emitExitCode =
-                "(function() { try { ${callbackFunc}.emit('exit', ${result.code}); } catch(e) { console.error(`emitExit error: \${e}`); } })();"
-            webView.post {
-                webView.evaluateJavascript(emitExitCode, null)
-            }
-
-            if (result.code != 0) {
-                val emitErrCode =
-                    "(function() { try { var err = new Error(); err.exitCode = ${result.code}; err.message = ${
-                        JSONObject.quote(
-                            result.err.joinToString(
-                                "\n"
-                            )
-                        )
-                    };${callbackFunc}.emit('error', err); } catch(e) { console.error('emitErr', e); } })();"
+        App.executor.submit {
+            try {
+                val result = future.get()
+                val emitExitCode =
+                    "(function() { try { ${callbackFunc}.emit('exit', ${result.code}); } catch(e) { console.error('emitExit error', e); } })();"
                 webView.post {
-                    webView.evaluateJavascript(emitErrCode, null)
+                    webView.evaluateJavascript(emitExitCode, null)
                 }
+
+                if (result.code != 0) {
+                    val emitErrCode =
+                        "(function() { try { var err = new Error(); err.exitCode = ${result.code}; err.message = ${
+                            JSONObject.quote(
+                                result.err.joinToString(
+                                    "\n"
+                                )
+                            )
+                        };${callbackFunc}.emit('error', err); } catch(e) { console.error('emitErr', e); } })();"
+                    webView.post {
+                        webView.evaluateJavascript(emitErrCode, null)
+                    }
+                }
+            } finally {
+                runCatching { shell.close() }
             }
-        }.whenComplete { _, _ ->
-            runCatching { shell.close() }
         }
     }
 
